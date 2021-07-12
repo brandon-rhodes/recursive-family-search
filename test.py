@@ -4,30 +4,45 @@ from __future__ import print_function
 
 import argparse
 import json
+import os
+import requests
 import sys
+from pathlib import Path
 from pprint import pprint
+from time import sleep
 
 def main(argv):
-    # parser = argparse.ArgumentParser(description=put description here)
-    # parser.add_argument('integers', metavar='N', type=int, nargs='+',
-    #                     help='an integer for the accumulator')
-    # parser.add_argument('--sum', dest='accumulate', action='store_const',
-    #                     const=sum, default=max,
-    #                     help='sum the integers (default: find the max)')
-    # args = parser.parse_args(argv)
-    # print(args.accumulate(args.integers))
+    parser = argparse.ArgumentParser(description='Backup family tree')
+    parser.add_argument('-d', dest='depth', default=0, type=int,
+                        help='depth')
+    parser.add_argument('-r', dest='reload', action='store_true',
+                        help='always reload rather than using cache')
+    parser.add_argument('person_id', help='Person ID to start with')
+    args = parser.parse_args(argv)
 
-    # import urllib.request as r
-    twr = 'G33C-HXS'
-    process(twr, 0, set())
+    client = Client(args.reload)
+    client.max_depth = args.depth
 
-def process(id, depth, already):
-    if depth > 20:
+    process(client, args.person_id, set(), 0)
+
+def process(client, id, already, depth):
+    if depth > client.max_depth:
         return
-    r = get_record(id)
+    person = get_person(client, id)
+    r = person['details']
     name = r['name']
     birthplace = get(r, 'birth', 'details', 'place', 'normalizedText')
-    print(' ' * depth, name, birthplace)
+    if birthplace:
+        birthplace = ', '.join(birthplace.split(', ')[-2:])
+    else:
+        birthplace = '-'
+    u = ' -?-' if unsure(person) else ''
+    line = '{} {}{} {} '.format(' ' * depth, id, u, name)
+    width = 78 - len(line)
+    line = f'{line} {birthplace:>{width}}'
+    print(line)
+    if unsure(person):
+        return
     for key in 'parent1', 'parent2':
         id = get(r, 'parents', 0, key, 'id')
         if not id:
@@ -35,7 +50,7 @@ def process(id, depth, already):
         if id in already:
             continue
         already.add(id)
-        process(id, depth + 1, already)
+        process(client, id, already, depth + 1)
 
 def get(value, *keys):
     for key in keys:
@@ -47,23 +62,20 @@ def get(value, *keys):
             return None
     return value
 
-def get_record(person):
-    path = 'cache/' + person
-    import os
-    if os.path.exists(path):
+def get_person(client, person_id):
+    #path = 'cache/' + person
+
+    cachedir = Path('/home/brandon/Archive/FamilySearch')
+    path = cachedir / person_id
+
+    if (not client.reload) and os.path.exists(path):
         with open(path) as f:
             data = f.read()
         return json.loads(data)
 
-    print('Fetching', person)
+    print('Fetching', person_id)
+    sleep(0.5)
 
-    import requests
-    import browsercookie
-    cj = browsercookie.chrome()
-
-    for cookie in cj:
-        if cookie.expires == 0:
-            cookie.expires = None
             # cookie.discard = True  # instead of False
             # cookie._rest = {'HttpOnly': None}  # instead of {}
             # if cookie.name == 'fssessionid':
@@ -89,16 +101,67 @@ def get_record(person):
 
     # return
 
-    url = 'https://www.familysearch.org/service/tree/tree-data/v8/person/{}/details?locale=en'.format(person)
-    r = requests.get(url, cookies=cj)
+    # TODO: use this URL to determine who Im following
+    # Where does sessionID come from
+    # Change names in cache to make clear; all in one JSON? or several
+    # files per person? maybe one file per person.
 
-    data = r.content
-    with open(path, 'wb') as c:
-        c.write(data)
+    # url = 'https://www.familysearch.org/service/tree/tree-data/watch/G3YS-1F4?sessionId=086e6c70-6b39-41ad-8d29-f3a4fc035c2e-prod'
+    # r = requests.get(url, cookies=cj)
+    # print(repr(r.content))
+    # print(repr(r.status_code))  # 204 if not following! 200 otherwise.
+    # exit()
 
-    return json.loads(data)
-    return
+    # url = 'https://www.familysearch.org/service/tree/tree-data/v8/person/G3YS-1F4/summary?locale=en'
+    # url = 'https://www.familysearch.org/service/tree/tree-data/family-members/person/G3YS-1F4?includePhotos=true'
+    # url = 'https://edge.fscdn.org/assets/components/fs-icons/dist/svg/watch-on-small-f1f41a449a73451f917e73b17b445fac.svg'
 
+    data = {}
+
+    url = 'https://www.familysearch.org/service/tree/tree-data/v8/person/{}/details?locale=en'.format(person_id)
+    r = client.get(url)
+
+    #print(repr(r.content))
+    data['details'] = json.loads(r.content)
+
+    url = (
+        'https://www.familysearch.org/service/tree/tree-data/watch/{}'
+        '?sessionId={}'.format(person_id, client.session_id)
+    )
+    r = client.get(url)
+
+    data['watch'] = (r.status_code == 200)
+
+    with open(path, 'w') as c:
+        json.dump(data, c, indent=2)
+        #c.write(data)
+
+    return data
+
+class Client:
+    def __init__(self, reload):
+        self.cj = None
+        self.reload = reload  # not used by class; probably belongs elsewhere?
+
+    def load_cookies(self):
+        import browsercookie
+        self.cj = cj = browsercookie.chrome()
+        for cookie in cj:
+            if cookie.expires == 0:
+                cookie.expires = None
+            if cookie.domain == '.familysearch.org':
+                if cookie.name == 'fssessionid':
+                    self.session_id = cookie.value
+
+    def get(self, url):
+        if self.cj is None:
+            self.load_cookies()
+        return requests.get(url, cookies=self.cj)
+
+def unsure(person):
+    return (not person['details']['living']) and (not person['watch'])
+
+def scrap():
     r = requests.Request('GET', url, cookies=cj)
     p = r.prepare()
     cookie_text = p.headers['Cookie']
