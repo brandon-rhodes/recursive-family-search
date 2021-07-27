@@ -15,12 +15,12 @@ def main(argv):
     parser = argparse.ArgumentParser(description='Backup family tree')
     parser.add_argument('-d', dest='depth', default=0, type=int,
                         help='depth')
-    parser.add_argument('-r', dest='reload', action='store_true',
-                        help='always reload rather than using cache')
+    parser.add_argument('-f', dest='force', action='store_true',
+                        help='force reload rather than using cache')
     parser.add_argument('person_id', help='Person ID to start with')
     args = parser.parse_args(argv)
 
-    client = Client(args.reload)
+    client = Client(args.force)
     client.max_depth = args.depth
 
     process(client, args.person_id, set(), 0)
@@ -30,6 +30,8 @@ def process(client, id, already, depth):
         return
     person = get_person(client, id)
     r = person['details']
+    #pprint(r)
+    lifespan = r['lifespan'].replace('Deceased', '?')
     name = r['name']
     birthplace = get(r, 'birth', 'details', 'place', 'normalizedText')
     if birthplace:
@@ -37,7 +39,7 @@ def process(client, id, already, depth):
     else:
         birthplace = '-'
     u = ' -?-' if unsure(person) else ''
-    line = '{} {}{} {} '.format(' ' * depth, id, u, name)
+    line = '{} {}{} {} ({}) '.format(' ' * depth, id, u, name, lifespan)
     width = 78 - len(line)
     line = f'{line} {birthplace:>{width}}'
     print(line)
@@ -65,10 +67,10 @@ def get(value, *keys):
 def get_person(client, person_id):
     #path = 'cache/' + person
 
-    cachedir = Path('/home/brandon/Archive/FamilySearch')
+    cachedir = Path('/home/brandon/Plain/FamilySearch')
     path = cachedir / person_id
 
-    if (not client.reload) and os.path.exists(path):
+    if (not client.force) and os.path.exists(path):
         with open(path) as f:
             data = f.read()
         return json.loads(data)
@@ -139,9 +141,9 @@ def get_person(client, person_id):
     return data
 
 class Client:
-    def __init__(self, reload):
+    def __init__(self, force):
         self.cj = None
-        self.reload = reload  # not used by class; probably belongs elsewhere?
+        self.force = force  # not used by class; probably belongs elsewhere?
 
     def load_cookies(self):
         import browsercookie
