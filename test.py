@@ -67,7 +67,8 @@ def get(value, *keys):
 def get_person(client, person_id):
     #path = 'cache/' + person
 
-    cachedir = Path('/home/brandon/Plain/FamilySearch')
+    cachedir = Path('~/gen/cache').expanduser()
+    cachedir.mkdir(exist_ok=True)
     path = cachedir / person_id
 
     if (not client.force) and os.path.exists(path):
