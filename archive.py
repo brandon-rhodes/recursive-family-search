@@ -20,7 +20,7 @@ def main(argv):
     parser = argparse.ArgumentParser(description='Rework JSON for archiving')
     parser.parse_args(argv)
 
-    cachedir = Path('~/gen/cache').expanduser()
+    cachedir = Path('~/genealogy/cache').expanduser()
     people = {}
     children = {}
 

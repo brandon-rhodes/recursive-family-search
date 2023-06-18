@@ -67,7 +67,7 @@ def get(value, *keys):
 def get_person(client, person_id):
     #path = 'cache/' + person
 
-    cachedir = Path('~/gen/cache').expanduser()
+    cachedir = Path('~/genealogy/cache').expanduser()
     cachedir.mkdir(exist_ok=True)
     path = cachedir / person_id
 
