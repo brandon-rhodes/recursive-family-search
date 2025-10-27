@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from __future__ import print_function
 
@@ -9,6 +9,7 @@ import requests
 import sys
 from pathlib import Path
 from pprint import pprint
+from random import randint
 from time import sleep
 
 def main(argv):
@@ -76,8 +77,8 @@ def get_person(client, person_id):
             data = f.read()
         return json.loads(data)
 
-    print('Fetching', person_id)
-    sleep(0.5)
+    print('Fetching', person_id, 'after a few seconds')
+    sleep(randint(2, 9))
 
             # cookie.discard = True  # instead of False
             # cookie._rest = {'HttpOnly': None}  # instead of {}
@@ -125,7 +126,12 @@ def get_person(client, person_id):
     r = client.get(url)
 
     #print(repr(r.content))
-    data['details'] = json.loads(r.content)
+    try:
+        data['details'] = json.loads(r.content)
+    except json.decoder.JSONDecodeError:
+        print(repr(r.content))
+        print('Error: above text is not JSON; exiting')
+        exit(1)
 
     url = (
         'https://www.familysearch.org/service/tree/tree-data/watch/{}'
