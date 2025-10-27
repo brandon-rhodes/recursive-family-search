@@ -44,12 +44,14 @@ def main(argv):
             json.dump(j, w, indent=2)
             w.write('\n')
 
+child_fields = ['child', 'id', 'lineageConclusions']
+
 def excise_children(j, children):
     if isinstance(j, list):
         for item in j:
             excise_children(item, children)
     elif isinstance(j, dict):
-        if sorted(j) == ['child', 'id', 'lineageConclusions']:
+        if sorted(j) == child_fields:
             del j['child']['principlePerson']  # field varies between records
             id = j['id']
             if id in children:
